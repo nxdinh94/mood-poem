@@ -46,6 +46,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [isSeeded, setIsSeeded] = useState(false);
   const [hasMoodToday, setHasMoodToday] = useState(false);
+  const [moodLoaded, setMoodLoaded] = useState(false); // Track if mood has been loaded from DB
 
   // Seed poems ngay khi app load (không cần login)
   useEffect(() => {
@@ -127,39 +128,47 @@ function App() {
       if (user) {
         setShowLoginPanel(false);
         
-        // Load mood và poem của ngày hôm nay khi user login
-        try {
-          const today = new Date().toISOString().split('T')[0];
-          const moodRef = doc(db, "user-mood-poem", user.uid, "moods", today);
-          const moodDoc = await getDoc(moodRef);
-          
-          if (moodDoc.exists()) {
-            const moodData = moodDoc.data();
-            const savedMood = moodData.mood as Mood;
-            setCurrentMood(savedMood);
-            setHasMoodToday(true);
-          } else {
-            setCurrentMood(null);
-            setHasMoodToday(false);
+        // Chỉ load mood lần đầu tiên, không load lại khi đã có
+        if (!moodLoaded) {
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            const moodRef = doc(db, "user-mood-poem", user.uid, "moods", today);
+            const moodDoc = await getDoc(moodRef);
+            
+            if (moodDoc.exists()) {
+              const moodData = moodDoc.data();
+              const savedMood = moodData.mood as Mood;
+              setCurrentMood(savedMood);
+              setHasMoodToday(true);
+            } else {
+              setCurrentMood(null);
+              setHasMoodToday(false);
+            }
+            
+            setMoodLoaded(true); // Mark as loaded
+            
+            // Load poem của ngày hôm nay (không phụ thuộc mood)
+            await loadTodayPoem(user.uid);
+          } catch (error) {
+            console.error("Error loading mood:", error);
+            setLoading(false);
           }
-          
-          // Load poem của ngày hôm nay (không phụ thuộc mood)
+        } else {
+          // Mood đã được load, chỉ load poem
           await loadTodayPoem(user.uid);
-        } catch (error) {
-          console.error("Error loading mood:", error);
-          setLoading(false);
         }
       } else {
         // Chưa login, reset mood
         setCurrentMood(null);
         setHasMoodToday(false);
+        setMoodLoaded(false); // Reset khi logout
         // Vẫn hiển thị poem random
         await loadTodayPoem();
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [moodLoaded]);
 
   const handleLogin = async () => {
     try {
@@ -202,6 +211,7 @@ function App() {
     setCurrentMood(mood);
     setHasMoodToday(true);
     setShowMoodSelector(false);
+    setMoodLoaded(true); // Mark as loaded sau khi user chọn mood
 
     // Lưu mood vào Firestore nếu user đã đăng nhập (không đổi poem)
     if (user) {
