@@ -376,6 +376,14 @@ function App() {
     happy: '😄'
   };
 
+  const moodLabels: Record<Mood, string> = {
+    angry: 'Tức giận',
+    sad: 'Buồn',
+    neutral: 'Bình thường',
+    content: 'Hài lòng',
+    happy: 'Vui vẻ'
+  };
+
   return (
     <div className="app-container">
       {/* Top Navigation */}
@@ -410,7 +418,7 @@ function App() {
             </div>
           ) : (
             <button onClick={() => setShowLoginPanel(true)} className="login-button">
-              Login
+              Đăng nhập
             </button>
           )}
         </div>
@@ -419,7 +427,7 @@ function App() {
       {/* Mood Selector */}
       {showMoodSelector && (
         <div className="mood-selector" ref={moodSelectorRef}>
-          <h3>How are you feeling?</h3>
+          <h3>Bạn cảm thấy thế nào?</h3>
           <div className="mood-options">
             {(Object.keys(moodEmojis) as Mood[]).map((mood) => (
               <button
@@ -428,7 +436,7 @@ function App() {
                 onClick={() => handleMoodSelect(mood)}
               >
                 <span className="mood-emoji">{moodEmojis[mood]}</span>
-                <span className="mood-label">{mood}</span>
+                <span className="mood-label">{moodLabels[mood]}</span>
               </button>
             ))}
           </div>
@@ -438,7 +446,7 @@ function App() {
       {/* Week Mood Panel */}
       {showWeekMoodPanel && (
         <div className="week-mood-panel" ref={weekMoodPanelRef}>
-          <h3>Your Week in Moods</h3>
+          <h3>Tâm trạng tuần qua</h3>
           <div className="week-mood-grid">
             {weekMoodsLoading ? (
               // Hiển thị 7 skeleton items khi đang load
@@ -474,8 +482,8 @@ function App() {
         <div className="login-panel-overlay" onClick={() => setShowLoginPanel(false)}>
           <div className="login-panel" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={() => setShowLoginPanel(false)}>×</button>
-            <h2>Welcome!</h2>
-            <p>Please sign in to select your mood and get personalized poems</p>
+            <h2>Chào mừng bạn!</h2>
+            <p>Vui lòng đăng nhập để chọn tâm trạng và nhận những bài thơ phù hợp</p>
             <button onClick={handleLogin} className="google-login-button">
               <svg viewBox="0 0 24 24" width="24" height="24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -483,7 +491,7 @@ function App() {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              Sign in with Google
+              Đăng nhập bằng Google
             </button>
           </div>
         </div>
@@ -495,7 +503,7 @@ function App() {
           <img src={logo} alt="Logo" className="logo-image" />
           {loading ? (
             <div className="poem-content">
-              <p className="loading-text">Loading poem...</p>
+              <p className="loading-text">Đang tải...</p>
             </div>
           ) : currentPoem ? (
             <div className="poem-content">
@@ -504,8 +512,8 @@ function App() {
             </div>
           ) : (
             <div className="poem-content">
-              <p className="poem-text">No poem available for this mood.</p>
-              <p className="poem-author">Please try another mood.</p>
+              <p className="poem-text">Không có bài thơ nào cho tâm trạng này.</p>
+              <p className="poem-author">Vui lòng thử tâm trạng khác.</p>
             </div>
           )}
         </div>
