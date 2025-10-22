@@ -486,8 +486,7 @@ html, body {
   opacity: 0.8;
   object-fit: contain;
   animation: fadeInLogo 1s ease;
-  border-radius: 70px;
-  
+  border-radius:300px; 
 }
 
 @keyframes fadeInLogo {
