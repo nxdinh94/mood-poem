@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp, collection, getDocs } from "firebase/firestore";
-import { seedPoems } from './utils/seedPoems'; // Uncomment để seed poems
+import happyIcon from './assets/emotion.png';
+import logo from './assets/logo.jpg';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -37,23 +38,30 @@ interface DailyPoem {
   mood: Mood;
 }
 
+interface WeekMood {
+  date: string;
+  day: string;
+  mood: Mood | null;
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [showMoodSelector, setShowMoodSelector] = useState(false);
   const [showLoginPanel, setShowLoginPanel] = useState(false);
+  const [showWeekMoodPanel, setShowWeekMoodPanel] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [currentMood, setCurrentMood] = useState<Mood | null>(null);
   const [currentPoem, setCurrentPoem] = useState<Poem | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isSeeded, setIsSeeded] = useState(false);
   const [hasMoodToday, setHasMoodToday] = useState(false);
   const [moodLoaded, setMoodLoaded] = useState(false); // Track if mood has been loaded from DB
+  const [weekMoods, setWeekMoods] = useState<WeekMood[]>([]);
+  const [weekMoodsLoading, setWeekMoodsLoading] = useState(false);
 
-  // Seed poems ngay khi app load (không cần login)
-  useEffect(() => {
-    if (!isSeeded) {
-      seedPoems(db).then(() => setIsSeeded(true));
-    }
-  }, [isSeeded]);
+  // Refs cho các panel để detect click outside
+  const moodSelectorRef = useRef<HTMLDivElement>(null);
+  const weekMoodPanelRef = useRef<HTMLDivElement>(null);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
 
   // Function để lấy random poem từ Firestore (bất kỳ mood nào)
   const getRandomPoem = async (): Promise<Poem | null> => {
@@ -122,6 +130,86 @@ function App() {
     }
   };
 
+  // Function để load mood của 7 ngày qua
+  const loadWeekMoods = async (userId: string) => {
+    setWeekMoodsLoading(true);
+    try {
+      const moods: WeekMood[] = [];
+      const today = new Date();
+      
+      // Lấy mood của 7 ngày (từ 6 ngày trước đến hôm nay)
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateString = date.toISOString().split('T')[0];
+        
+        // Lấy tên ngày trong tuần
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayName = dayNames[date.getDay()];
+        
+        // Load mood từ Firestore
+        const moodRef = doc(db, "user-mood-poem", userId, "moods", dateString);
+        const moodDoc = await getDoc(moodRef);
+        
+        moods.push({
+          date: dateString,
+          day: dayName,
+          mood: moodDoc.exists() ? (moodDoc.data().mood as Mood) : null
+        });
+      }
+      
+      setWeekMoods(moods);
+    } catch (error) {
+      console.error("Error loading week moods:", error);
+    } finally {
+      setWeekMoodsLoading(false);
+    }
+  };
+
+  // Handle click outside để đóng các panel
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      
+      // Check mood selector
+      if (showMoodSelector && moodSelectorRef.current && !moodSelectorRef.current.contains(target)) {
+        // Kiểm tra xem có phải click vào mood button không
+        const moodButton = document.querySelector('.mood-button');
+        if (moodButton && !moodButton.contains(target)) {
+          setShowMoodSelector(false);
+        }
+      }
+      
+      // Check week mood panel
+      if (showWeekMoodPanel && weekMoodPanelRef.current && !weekMoodPanelRef.current.contains(target)) {
+        // Kiểm tra xem có phải click vào dropdown item không
+        const dropdownItems = document.querySelectorAll('.dropdown-item');
+        let clickedDropdownItem = false;
+        dropdownItems.forEach(item => {
+          if (item.contains(target)) {
+            clickedDropdownItem = true;
+          }
+        });
+        if (!clickedDropdownItem) {
+          setShowWeekMoodPanel(false);
+        }
+      }
+      
+      // Check user dropdown
+      if (showUserDropdown && userDropdownRef.current && !userDropdownRef.current.contains(target)) {
+        const userInfo = document.querySelector('.user-info');
+        if (userInfo && !userInfo.contains(target)) {
+          setShowUserDropdown(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showMoodSelector, showWeekMoodPanel, showUserDropdown]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
@@ -149,6 +237,9 @@ function App() {
             
             // Load poem của ngày hôm nay (không phụ thuộc mood)
             await loadTodayPoem(user.uid);
+            
+            // Load week moods ngay khi user login để sẵn sàng hiển thị
+            await loadWeekMoods(user.uid);
           } catch (error) {
             console.error("Error loading mood:", error);
             setLoading(false);
@@ -162,6 +253,7 @@ function App() {
         setCurrentMood(null);
         setHasMoodToday(false);
         setMoodLoaded(false); // Reset khi logout
+        setWeekMoods([]); // Reset week moods
         // Vẫn hiển thị poem random
         await loadTodayPoem();
       }
@@ -194,6 +286,9 @@ function App() {
           lastLogin: serverTimestamp()
         });
       }
+      
+      // Refresh page sau khi login
+      window.location.reload();
     } catch (error) {
       console.error("Error signing in:", error);
     }
@@ -202,6 +297,8 @@ function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      // Refresh page sau khi logout
+      window.location.reload();
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -258,6 +355,19 @@ function App() {
     }
   };
 
+  const handleShowWeekMood = () => {
+    if (!user) {
+      setShowLoginPanel(true);
+    } else {
+      setShowWeekMoodPanel(!showWeekMoodPanel);
+      setShowUserDropdown(false); // Đóng dropdown khi mở week mood panel
+    }
+  };
+
+  const handleToggleUserDropdown = () => {
+    setShowUserDropdown(!showUserDropdown);
+  };
+
   const moodEmojis: Record<Mood, string> = {
     angry: '😠',
     sad: '😢',
@@ -271,15 +381,32 @@ function App() {
       {/* Top Navigation */}
       <nav className="top-nav">
         <button className="mood-button" onClick={handleAskMood}>
-          How are you feeling? {!user || !hasMoodToday ? '➕' : currentMood && moodEmojis[currentMood]}
+          {!user || !hasMoodToday ? (
+            <img src={happyIcon} alt="mood" className="mood-icon" />
+          ) : (
+            currentMood && moodEmojis[currentMood]
+          )}
         </button>
         
         <div className="auth-section">
           {user ? (
-            <div className="user-info">
-              <img src={user.photoURL || ''} alt="Profile" className="user-avatar" />
-              <span className="user-name">{user.displayName}</span>
-              <button onClick={handleLogout} className="logout-button">Logout</button>
+            <div className="user-profile-container">
+              <div className="user-info" onClick={handleToggleUserDropdown}>
+                <img src={user.photoURL || ''} alt="Profile" className="user-avatar" />
+                <span className="user-name">{user.displayName}</span>
+                <span className="dropdown-arrow">{showUserDropdown ? '▲' : '▼'}</span>
+              </div>
+              
+              {showUserDropdown && (
+                <div className="user-dropdown" ref={userDropdownRef}>
+                  <button onClick={handleShowWeekMood} className="dropdown-item">
+                    Theo dõi Mood
+                  </button>
+                  <button onClick={handleLogout} className="dropdown-item logout">
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button onClick={() => setShowLoginPanel(true)} className="login-button">
@@ -291,7 +418,7 @@ function App() {
 
       {/* Mood Selector */}
       {showMoodSelector && (
-        <div className="mood-selector">
+        <div className="mood-selector" ref={moodSelectorRef}>
           <h3>How are you feeling?</h3>
           <div className="mood-options">
             {(Object.keys(moodEmojis) as Mood[]).map((mood) => (
@@ -304,6 +431,40 @@ function App() {
                 <span className="mood-label">{mood}</span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Week Mood Panel */}
+      {showWeekMoodPanel && (
+        <div className="week-mood-panel" ref={weekMoodPanelRef}>
+          <h3>Your Week in Moods</h3>
+          <div className="week-mood-grid">
+            {weekMoodsLoading ? (
+              // Hiển thị 7 skeleton items khi đang load
+              Array.from({ length: 7 }).map((_, index) => (
+                <div key={`loading-${index}`} className="week-mood-item loading">
+                  <div className="week-day">...</div>
+                  <div className="week-mood-emoji">
+                    <div className="loading-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              // Hiển thị data khi đã load xong
+              weekMoods.map((dayMood) => (
+                <div key={dayMood.date} className="week-mood-item">
+                  <div className="week-day">{dayMood.day}</div>
+                  <div className="week-mood-emoji">
+                    {dayMood.mood ? moodEmojis[dayMood.mood] : '—'}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -330,21 +491,24 @@ function App() {
 
       {/* Main Content - Poem Display */}
       <main className="poem-container">
-        {loading ? (
-          <div className="poem-content">
-            <p className="loading-text">Loading poem...</p>
-          </div>
-        ) : currentPoem ? (
-          <div className="poem-content">
-            <pre className="poem-text">{currentPoem.content}</pre>
-            <p className="poem-author">— {currentPoem.author}</p>
-          </div>
-        ) : (
-          <div className="poem-content">
-            <p className="poem-text">No poem available for this mood.</p>
-            <p className="poem-author">Please try another mood.</p>
-          </div>
-        )}
+        <div className="poem-wrapper">
+          <img src={logo} alt="Logo" className="logo-image" />
+          {loading ? (
+            <div className="poem-content">
+              <p className="loading-text">Loading poem...</p>
+            </div>
+          ) : currentPoem ? (
+            <div className="poem-content">
+              <pre className="poem-text">{currentPoem.content}</pre>
+              <p className="poem-author">— {currentPoem.author}</p>
+            </div>
+          ) : (
+            <div className="poem-content">
+              <p className="poem-text">No poem available for this mood.</p>
+              <p className="poem-author">Please try another mood.</p>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   )

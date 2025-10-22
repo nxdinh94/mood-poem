@@ -1,4 +1,4 @@
-import { getFirestore, collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, collection, doc, setDoc, serverTimestamp, getDocs } from "firebase/firestore";
 
 export interface PoemData {
   id: string;
@@ -131,6 +131,16 @@ export const poemsData: PoemData[] = [
 export const seedPoems = async (db: ReturnType<typeof getFirestore>) => {
   try {
     const poemsCollection = collection(db, "poem-poem");
+    
+    // Kiểm tra xem đã có poems chưa
+    const existingPoems = await getDocs(poemsCollection);
+    
+    if (!existingPoems.empty) {
+      console.log(`ℹ️ Poems already seeded (${existingPoems.size} poems found). Skipping...`);
+      return;
+    }
+    
+    console.log("🌱 Starting to seed poems...");
     
     for (const poem of poemsData) {
       const poemRef = doc(poemsCollection, poem.id);
